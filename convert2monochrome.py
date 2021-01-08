@@ -9,17 +9,25 @@ from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
 from pdfminer.converter import TextConverter
 from pdfminer.pdfpage import PDFPage
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 class ImageWriter:
     def export_image(self, image):
-        print("\tImage", image.name, '(%dx%d)' % image.srcsize)
+        print("\tImage", image.name, '(%d, %d)' % image.srcsize)
         raw_data = image.stream.get_rawdata()
         i = Image.open(BytesIO(raw_data))
         # i = ImageChops.invert(i)
         i = i.convert('RGB')
         self.image = i
+
+def floodfill(img: Image, xy, thresh):
+    pixel = img.getpixel(xy)
+    print("\t\tPixel", '(%4d, %4d)' % xy, pixel)
+    if pixel < 0xff:
+        ImageDraw.floodfill(img, xy, 0xff, thresh=thresh)
+        #draw = ImageDraw.Draw(img)
+        #draw.regular_polygon((xy, 50), 10, fill=0xff)
 
 def main(args=None):
     parser = argparse.ArgumentParser(
@@ -33,6 +41,12 @@ def main(args=None):
     parse_params.add_argument(
         "--threshold", "-t", type=int, default=0xc0,
         help="The threshold level for monochrome (default 0xc0).")
+
+    parse_edge = parser.add_argument_group(
+        'Corner', description='Fill corners')
+    parse_edge.add_argument(
+        "--tolerance", "-f", type=int, default=None,
+        help="The tolerance (difference) for edge detection (default None).")
 
     args = parser.parse_args(args=args)
     if not args.file:
@@ -56,8 +70,17 @@ def main(args=None):
             for page in PDFPage.get_pages(in_fp):
                 print("\tPage", page.pageid)
                 interpreter.process_page(page)
+                img = imagewriter.image
+                if img.mode != 'L':
+                    # convert to greyscale
+                    img = img.convert('L')
                 # convert every point to black (0x00) or white (0xff)
-                img = imagewriter.image.point(lambda i: 0xff if i >= args.threshold else 0)
+                img = img.point(lambda i: 0xff if i >= args.threshold else 0)
+                if args.tolerance is not None:
+                    floodfill(img, (5, 5), thresh=args.tolerance)
+                    floodfill(img, (5, img.size[1] - 5), thresh=args.tolerance)
+                    floodfill(img, (img.size[0] - 5, 5), thresh=args.tolerance)
+                    floodfill(img, (img.size[0] - 5, img.size[1] - 5), thresh=args.tolerance)
                 images.append(img)
 
             device.close()
