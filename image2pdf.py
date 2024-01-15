@@ -58,6 +58,11 @@ def main(args=None):
             while images:
                 images.pop().close()
 
+    if images:
+        images[0].save(out_fname, save_all=True, append=True, append_images=images[1:])
+        while images:
+            images.pop().close()
+
     print("\tSaved", out_fname)
 
 if __name__ == '__main__':
